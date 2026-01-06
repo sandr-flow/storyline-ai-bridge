@@ -97,4 +97,4 @@ External resources:
 
 ## License
 
-ISC
+PolyForm Noncommercial 1.0.0 (`LICENSE`, https://polyformproject.org/licenses/noncommercial/1.0.0)
