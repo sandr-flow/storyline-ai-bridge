@@ -20,6 +20,7 @@ Storyline AI Bridge connects Storyline courses to AI providers through a small N
 Key features:
 
 - Text and voice requests to Gemini, OpenAI, or Yandex.
+- Text-only requests to Mistral.
 - Session memory stored in Netlify Blobs.
 - Same-origin WebRecorder API for reading Storyline variables safely.
 
@@ -73,9 +74,10 @@ Create a `.env` file based on `.env.example`, or set the variables in Netlify.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `AI_PROVIDER` | Yes | Provider selector: `gemini`, `openai`, or `yandex`. |
+| `AI_PROVIDER` | Yes | Provider selector: `gemini`, `openai`, `yandex`, or `mistral`. |
 | `GEMINI_API_KEY` | If `AI_PROVIDER=gemini` | Google Gemini API key. |
 | `OPENAI_API_KEY` | If `AI_PROVIDER=openai` | OpenAI API key. |
+| `MISTRAL_API_KEY` | If `AI_PROVIDER=mistral` | Mistral API key (text-only). |
 | `YANDEX_API_KEY` | If `AI_PROVIDER=yandex` | Yandex Cloud API key. |
 | `YANDEX_FOLDER_ID` | If `AI_PROVIDER=yandex` | Yandex Cloud folder ID. |
 | `NETLIFY_SITE_ID` | Optional | Netlify site ID for manual Blobs config. |
@@ -89,6 +91,7 @@ External resources:
 - Netlify CLI: https://docs.netlify.com/cli/get-started/
 - Google AI Studio (Gemini keys): https://aistudio.google.com/
 - OpenAI API keys: https://platform.openai.com/api-keys
+- Mistral API keys: https://console.mistral.ai/
 - Yandex Cloud console: https://console.cloud.yandex.com/
 
 ## License

@@ -33,4 +33,5 @@ These variables are read and written by `for LMS/same-origin_API/recorder-bridge
 ## Notes
 
 - The backend requires a prompt. Voice requests still use `SR_Prompt` as context.
+- `AI_PROVIDER=mistral` supports text-only requests.
 - For same-origin access, the Web Object must be served from the same domain as the Storyline output.

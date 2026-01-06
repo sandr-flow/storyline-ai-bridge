@@ -7,6 +7,7 @@ const { getStore } = require('@netlify/blobs');
 const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./providers/gemini');
 const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
 const { generateTextWithYandex, generateTextWithYandexAndAudio } = require('./providers/yandex');
+const { generateTextWithMistral } = require('./providers/mistral');
 
 // CORS origin for preflight and responses.
 const ALLOWED_ORIGIN = "*";
@@ -260,6 +261,7 @@ exports.handler = async (event) => {
     const openaiApiKey = process.env.OPENAI_API_KEY;
     const yandexApiKey = process.env.YANDEX_API_KEY;
     const yandexFolderId = process.env.YANDEX_FOLDER_ID;
+    const mistralApiKey = process.env.MISTRAL_API_KEY;
 
     try {
         let requestParts = [];
@@ -337,6 +339,8 @@ exports.handler = async (event) => {
                 );
                 text = typeof res === 'string' ? res : res.message;
                 transcript = typeof res === 'object' ? res.transcript : undefined;
+            } else if (provider === 'mistral') {
+                return { statusCode: 400, headers, body: JSON.stringify({ error: 'Mistral does not support audio input. Use a text request.' }) };
             }
 
             
@@ -425,6 +429,12 @@ exports.handler = async (event) => {
                 messagesForProvider,
                 { modelName, modelUri, temperature, maxTokens }
             );
+        } else if (provider === 'mistral') {
+            if (!mistralApiKey) {
+                return { statusCode: 500, headers, body: JSON.stringify({ error: 'MISTRAL_API_KEY is not set.' }) };
+            }
+            console.log('[Provider] mistral (text pipeline with session)');
+            text = await generateTextWithMistral(mistralApiKey, messagesForProvider);
         }
 
         

@@ -39,6 +39,7 @@ for LMS/same-origin_API/index.html
 
 - Same-origin is required. The iframe must be served from the same domain as the Storyline output so `GetPlayer()` is accessible.
 - For deployment outside Netlify, set `SR_FunctionUrl` to your function URL.
+- `AI_PROVIDER=mistral` supports text-only requests.
 
 ## Related Docs
 
