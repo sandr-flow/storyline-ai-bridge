@@ -1,133 +1,96 @@
-# Storyline Bridge AI
+# Storyline AI Bridge
 
-Интеграция искусственного интеллекта в курсы Articulate Storyline. Добавляет текстовый и голосовой диалог с ИИ в интерактивные курсы.
+Integrates AI text and voice interactions into Articulate Storyline courses via Netlify Functions.
 
-## Возможности
+## Table of Contents
 
-- Текстовый и голосовой диалог
-- Память разговора (контекст сессии)
-- Ролевые сценарии (система промптов)
-- Три ИИ-провайдера: Gemini, OpenAI, Yandex
-- REST API через Netlify Functions
+- [Background](#background)
+- [Install](#install)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [License](#license)
 
-## Структура проекта
+## Background
 
-```
-nord-m-gemini-bridge/
-├── netlify/
-│   ├── functions/
-│   │   ├── generate.js          (основной обработчик запросов)
-│   │   └── providers/           (интеграция с ИИ)
-│   │       ├── gemini.js
-│   │       ├── openai.js
-│   │       └── yandex.js
-├── for LMS/
-│   └── same-origin_API/
-│       ├── index.html           (веб-компонент для Storyline)
-│       ├── recorder-bridge.js   (JS API)
-│       └── test.html            (тестирование)
-├── netlify.toml
-└── package.json
-```
+Storyline AI Bridge connects Storyline courses to AI providers through a small Netlify Functions backend and two browser-side bridges:
 
-## Использование в Storyline
+- A simple iframe bridge for Storyline web objects (`index.html` + `bridge-netlify.js`).
+- A same-origin WebRecorder API for LMS deployments (`for LMS/same-origin_API/recorder-bridge.js`).
 
-### 1. Добавьте веб-объект на слайд
+Key features:
 
-Web Object с путем:
-```
-for LMS/same-origin_API/index.html
-```
+- Text and voice requests to Gemini, OpenAI, or Yandex.
+- Session memory stored in Netlify Blobs.
+- Same-origin WebRecorder API for reading Storyline variables safely.
 
-Веб-объект всегда локальный, так как публикуется вместе с курсом. API запросы идут на Netlify Functions автоматически.
+## Install
 
-### 2. Создайте переменные
+Prerequisites:
 
-- `SR_Prompt` - вопрос/ввод пользователя
-- `SR_System` - инструкция для ИИ (роль, контекст)
-- `SR_SessionId` - ID сессии (для сохранения истории)
-- `SL_Response` - ответ ИИ
+- Node.js 18 (matches `netlify.toml`)
+- Netlify CLI
+- API keys for the provider you plan to use
 
-### 3. Используйте API в триггерах
-
-API WebRecorder доступен через iframe:
-
-```
-WR.setPrompt(text)        - установить вопрос
-WR.setSystem(text)        - установить системный промпт
-WR.setSessionId(id)       - установить сессию для истории
-WR.send()                 - отправить запрос
-WR.setMode('text'|'voice'|'mixed')  - выбрать режим
-```
-
-События: `SR_response`, `SR_transcription`, `SR_status`
-
-## Развертывание
-
-### Локально
+Steps:
 
 ```bash
 npm install
+```
+
+```bash
 netlify dev
 ```
 
-### На Netlify
+## Usage
 
-1. Подключите репозиторий на Netlify
-2. Установите переменные окружения (Settings -> Environment):
+Local development:
 
-```
-AI_PROVIDER=gemini          (gemini | openai | yandex)
-GEMINI_API_KEY=...
-OPENAI_API_KEY=...
-YANDEX_API_KEY=...
-YANDEX_FOLDER_ID=...
-NETLIFY_SITE_ID=...
-NETLIFY_BLOBS_TOKEN=...
+```bash
+netlify dev
 ```
 
-3. Деплой автоматический при push
+API endpoint:
 
-## Конфигурация
+- `POST /.netlify/functions/generate`
+- `Content-Type: application/json` or `multipart/form-data`
 
-### Выбор ИИ провайдера
+Example JSON request:
 
-Переменная окружения `AI_PROVIDER`:
-- `gemini` (по умолчанию)
-- `openai`
-- `yandex`
-
-### Параметры сессии
-
-В `netlify/functions/generate.js`:
-- `SESSION_TTL_MINUTES` - время жизни сессии (мин)
-- `MAX_MESSAGES_IN_SESSION` - макс. сообщений в истории
-
-## API endpoint
-
-POST `/.netlify/functions/generate`
-
-Content-Type: `application/json` или `multipart/form-data`
-
-Параметры:
-- `prompt` - текст запроса (обязателен)
-- `system` - системный промпт
-- `sessionId` - ID сессии для истории
-- `audio` - аудиофайл (для голосового ввода)
-- `endSession` - завершить сессию
-- `resetContext` - очистить историю
-
-## Документация
-
-- `for LMS/SESSION_GUIDE.md` - подробное руководство WebRecorder
-- `for LMS/same-origin_API/USAGE_SCENARIOS_RU.md` - примеры сценариев
-- `for LMS/same-origin_API/test.html` - тестирование функций
-
-## Отладка
-
-Включить логирование:
-```
-WR.debug(true)
+```bash
+curl -X POST http://localhost:8888/.netlify/functions/generate \
+  -H "Content-Type: application/json" \
+  -d '{"prompt":"Hello","system":"","sessionId":"demo-session"}'
 ```
 
-Посмотреть сообщения в консоли браузера (F12).
+Same-origin LMS bridge:
+
+- Use `for LMS/same-origin_API/index.html` as a Storyline Web Object.
+- See the LMS guides in `for LMS/` for setup and Storyline variables.
+
+## Configuration
+
+Create a `.env` file based on `.env.example`, or set the variables in Netlify.
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `AI_PROVIDER` | Yes | Provider selector: `gemini`, `openai`, or `yandex`. |
+| `GEMINI_API_KEY` | If `AI_PROVIDER=gemini` | Google Gemini API key. |
+| `OPENAI_API_KEY` | If `AI_PROVIDER=openai` | OpenAI API key. |
+| `YANDEX_API_KEY` | If `AI_PROVIDER=yandex` | Yandex Cloud API key. |
+| `YANDEX_FOLDER_ID` | If `AI_PROVIDER=yandex` | Yandex Cloud folder ID. |
+| `NETLIFY_SITE_ID` | Optional | Netlify site ID for manual Blobs config. |
+| `NETLIFY_BLOBS_TOKEN` | Optional | Netlify Blobs token for manual config. |
+| `N_SITE_ID` | Optional | Alias for `NETLIFY_SITE_ID`. |
+| `N_BLOB_TOKEN` | Optional | Alias for `NETLIFY_BLOBS_TOKEN`. |
+
+External resources:
+
+- Netlify: https://www.netlify.com/
+- Netlify CLI: https://docs.netlify.com/cli/get-started/
+- Google AI Studio (Gemini keys): https://aistudio.google.com/
+- OpenAI API keys: https://platform.openai.com/api-keys
+- Yandex Cloud console: https://console.cloud.yandex.com/
+
+## License
+
+ISC

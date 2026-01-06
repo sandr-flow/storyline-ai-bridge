@@ -6,6 +6,8 @@ package-lock.json
 .env
 .env.local
 .env.*.local
+.envrc
+.direnv/
 
 # Storyline assets (not for git)
 # "for LMS/"
