@@ -42,6 +42,6 @@ for LMS/same-origin_API/index.html
 
 ## Related Docs
 
-- `for LMS/same-origin_API/RECORDER_COMMANDS_RU.md`
-- `for LMS/same-origin_API/RECORDER_VARS_RU.md`
-- `for LMS/same-origin_API/USAGE_SCENARIOS_RU.md`
+- `for LMS/same-origin_API/RECORDER_COMMANDS.md`
+- `for LMS/same-origin_API/RECORDER_VARS.md`
+- `for LMS/same-origin_API/USAGE_SCENARIOS.md`
