@@ -21,7 +21,7 @@ Key features:
 
 - Text and voice requests to Gemini, OpenAI, or Yandex.
 - Text-only requests to Mistral.
-- Session memory stored in Netlify Blobs.
+- Session memory stored in Netlify Blobs when `sessionId` is provided.
 - Same-origin WebRecorder API for reading Storyline variables safely.
 
 ## Install
@@ -53,7 +53,8 @@ netlify dev
 API endpoint:
 
 - `POST /.netlify/functions/generate`
-- `Content-Type: application/json` or `multipart/form-data`
+- `Content-Type: application/json` for text requests
+- `Content-Type: multipart/form-data` for audio requests (requires an `audio` file; supports `prompt`, `system`, `sessionId`, `endSession`, `resetContext`, `audioFormat`)
 
 Example JSON request:
 

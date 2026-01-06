@@ -33,9 +33,15 @@ Use when you want session memory across multiple turns.
   if (!iframe) return;
   var WR = iframe.contentWindow.WebRecorder;
 
-  // Create a session ID once per slide if missing
+  // Create a session ID once, reuse if it already exists
   if (!WR || !WR.newSessionId) return;
-  WR.newSessionId('sr');
+  var player = (typeof GetPlayer === 'function') ? GetPlayer() : null;
+  var existing = player ? player.GetVar('SR_SessionId') : '';
+  if (existing) {
+    WR.setSessionId(existing);
+  } else {
+    WR.newSessionId('sr');
+  }
 
   // Set a shared system prompt for the session
   WR.setSystem('You are a friendly tutor. Keep context across turns.');

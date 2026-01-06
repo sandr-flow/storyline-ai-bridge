@@ -15,11 +15,24 @@ for LMS/same-origin_API/index.html
 - `SR_Prompt`
 - `SR_System`
 - `SR_SessionId`
+- `SR_ResetContext` (optional: True/False)
+- `SR_EndSession` (optional: True/False)
 - `SR_Response`
 - `SR_Transcript` (optional)
 - `SR_Status` (optional)
 - `SR_Mode` (optional: `text` | `voice` | `mixed`)
 - `SR_AutoSend` (optional: True/False)
+- `SR_FunctionUrl` (optional: override backend URL)
+
+Advanced (optional):
+
+- `SR_AudioFormat` (e.g., `webm`, `oggopus`)
+- `SR_ModelName`
+- `SR_ModelUri`
+- `SR_Temperature`
+- `SR_MaxTokens`
+- `SR_Provider` (hint only; backend still uses `AI_PROVIDER`)
+- `SR_Debug` (True/False)
 
 3) Initialize the API once per slide:
 
@@ -33,12 +46,12 @@ for LMS/same-origin_API/index.html
 })();
 ```
 
-4) Set `SR_Prompt` and call `WebRecorder.send()` from a Storyline trigger, or enable autosend with `SR_AutoSend=True`.
+4) Set `SR_Prompt` and call `iframe.contentWindow.WebRecorder.send()` from a Storyline trigger, or enable autosend with `SR_AutoSend=True`.
 
 ## Notes
 
 - Same-origin is required. The iframe must be served from the same domain as the Storyline output so `GetPlayer()` is accessible.
-- For deployment outside Netlify, set `SR_FunctionUrl` to your function URL.
+- The default backend endpoint is hardcoded in `recorder-bridge.js`; set `SR_FunctionUrl` (or pass `init({ endpoint: "..." })`) to use your own function URL.
 - `AI_PROVIDER=mistral` supports text-only requests.
 
 ## Related Docs

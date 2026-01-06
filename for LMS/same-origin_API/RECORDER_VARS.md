@@ -6,7 +6,7 @@ These variables are read and written by `for LMS/same-origin_API/recorder-bridge
 
 | Variable | Type | Required | Description |
 | --- | --- | --- | --- |
-| `SR_Prompt` | Text | Yes | User prompt. Must be non-empty to send text or audio requests. |
+| `SR_Prompt` | Text | Yes | User prompt. Required for text requests unless `UserResponse`/`UserResponce` exists; optional for audio. |
 | `SR_System` | Text | No | System instructions (role or behavior). |
 | `SR_SessionId` | Text | No | Session ID for memory. When set, the backend stores history in Netlify Blobs. |
 | `SR_ResetContext` | True/False | No | Clear history for the current session before the next send. |
@@ -32,6 +32,6 @@ These variables are read and written by `for LMS/same-origin_API/recorder-bridge
 
 ## Notes
 
-- The backend requires a prompt. Voice requests still use `SR_Prompt` as context.
+- Text requests require a prompt (from `SR_Prompt` or `UserResponse`/`UserResponce`). Audio requests can send with an empty prompt, but it is still used as context when provided.
 - `AI_PROVIDER=mistral` supports text-only requests.
 - For same-origin access, the Web Object must be served from the same domain as the Storyline output.
