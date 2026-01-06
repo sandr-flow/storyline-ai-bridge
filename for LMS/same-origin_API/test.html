@@ -48,6 +48,16 @@
 
   <script src="recorder-bridge.js"></script>
   <script>
+    /**
+     * Append a log entry to the test console.
+     *
+     * Args:
+     *   message: Log message text.
+     *   isError: Whether to mark as error.
+     *
+     * Returns:
+     *   None.
+     */
     function log(message, isError = false) {
       const logEl = document.getElementById('log');
       const div = document.createElement('div');
@@ -58,6 +68,12 @@
       console.log(message);
     }
 
+    /**
+     * Initialize WebRecorder for local testing.
+     *
+     * Returns:
+     *   None.
+     */
     function testInit() {
       try {
         if (!window.WebRecorder) {
@@ -65,7 +81,7 @@
           return;
         }
         window.WebRecorder.init({ 
-          autosync: false, // отключаем синхронизацию со Storyline для теста
+          autosync: false, 
           mode: 'mixed',
           endpoint: 'https://nord-m-gemini.netlify.app/.netlify/functions/generate'
         });
@@ -75,6 +91,12 @@
       }
     }
 
+    /**
+     * Enable debug logging in WebRecorder.
+     *
+     * Returns:
+     *   None.
+     */
     function testDebug() {
       try {
         window.WebRecorder.debug(true);
@@ -84,6 +106,12 @@
       }
     }
 
+    /**
+     * Send a text prompt using WebRecorder.
+     *
+     * Returns:
+     *   None.
+     */
     function testTextSend() {
       try {
         const prompt = document.getElementById('testPrompt').value;
@@ -108,6 +136,12 @@
       }
     }
 
+    /**
+     * Start a microphone recording.
+     *
+     * Returns:
+     *   None.
+     */
     function testStartRecord() {
       try {
         log('Начинаем запись...');
@@ -119,6 +153,12 @@
       }
     }
 
+    /**
+     * Stop the current recording.
+     *
+     * Returns:
+     *   None.
+     */
     function testStopRecord() {
       try {
         window.WebRecorder.stopRecording();
@@ -128,6 +168,12 @@
       }
     }
 
+    /**
+     * Play the recorded audio preview.
+     *
+     * Returns:
+     *   None.
+     */
     function testPlay() {
       try {
         window.WebRecorder.play();
@@ -137,6 +183,12 @@
       }
     }
 
+    /**
+     * Send the recorded audio using WebRecorder.
+     *
+     * Returns:
+     *   None.
+     */
     function testSendAudio() {
       try {
         window.WebRecorder.setMode('voice');
@@ -153,6 +205,15 @@
       }
     }
 
+    /**
+     * Toggle autosend behavior.
+     *
+     * Args:
+     *   enable: Boolean flag.
+     *
+     * Returns:
+     *   None.
+     */
     function testAutosend(enable) {
       try {
         window.WebRecorder.setAutosend(enable);
@@ -162,6 +223,12 @@
       }
     }
 
+    /**
+     * Update the prompt and rely on autosend.
+     *
+     * Returns:
+     *   None.
+     */
     function testAutoPromptChange() {
       try {
         const prompt = document.getElementById('autoPrompt').value;
@@ -177,7 +244,8 @@
       }
     }
 
-    // Автоинициализация при загрузке
+    
+    // Auto-initialize the test page on load.
     window.addEventListener('load', () => {
       log('Страница загружена, проверяем WebRecorder...');
       if (window.WebRecorder) {
@@ -188,7 +256,8 @@
       }
     });
 
-    // Перехватываем сообщения от API
+    
+    // Mirror SR_ events into the test log.
     window.addEventListener('message', (e) => {
       const data = e.data || {};
       if (data.type && data.type.startsWith('SR_')) {

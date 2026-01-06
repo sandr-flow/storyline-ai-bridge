@@ -1,14 +1,27 @@
-// bridge-netlify.js
+/**
+ * Storyline iframe bridge for Netlify Functions.
+ */
 
-const PARENT_WINDOW_ORIGIN = '*'; // В продакшене замените на origin вашего LMS
+// Use '*' for development; set your LMS origin in production.
+const PARENT_WINDOW_ORIGIN = '*';
 
 let mediaRecorder;
 let audioChunks = [];
 let currentAudioPrompt = "";
-let recordedAudioBlob = null; // Будет хранить записанный Blob для прослушивания/отправки
-let audioPreviewElement = null; // Элемент для проигрывания
+let recordedAudioBlob = null; 
+let audioPreviewElement = null; 
 
-// --- Функции обратной связи со Storyline ---
+
+/**
+ * Post a status message to the parent window.
+ *
+ * Args:
+ *   type: Message type string.
+ *   payload: Payload object or value.
+ *
+ * Returns:
+ *   None.
+ */
 function postStatusToParent(type, payload) {
     const message = { type, payload };
     try { if (window.top) window.top.postMessage(message, PARENT_WINDOW_ORIGIN); } catch (_) {}
@@ -16,20 +29,26 @@ function postStatusToParent(type, payload) {
     console.log(`Sending to parent: ${type}`, payload);
 }
 
-// --- Логика записи и управления аудио ---
 
+
+/**
+ * Start microphone recording and collect audio chunks.
+ *
+ * Returns:
+ *   None.
+ */
 async function startRecording() {
     try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         mediaRecorder = new MediaRecorder(stream);
         audioChunks = [];
-        recordedAudioBlob = null; // Сбрасываем предыдущую запись
+        recordedAudioBlob = null; 
 
         mediaRecorder.ondataavailable = event => {
             audioChunks.push(event.data);
         };
 
-        // МОДИФИКАЦИЯ: Теперь onstop не отправляет, а сохраняет аудио и уведомляет Storyline
+        
         mediaRecorder.onstop = () => {
             recordedAudioBlob = new Blob(audioChunks, { type: 'audio/webm' });
             postStatusToParent('recordingState', { status: 'recorded', message: 'Запись завершена. Готово к прослушиванию или отправке.' });
@@ -43,15 +62,27 @@ async function startRecording() {
     }
 }
 
+/**
+ * Stop the active recording if one is running.
+ *
+ * Returns:
+ *   None.
+ */
 function stopRecording() {
     if (mediaRecorder && mediaRecorder.state === 'recording') {
-        mediaRecorder.stop(); // Это вызовет onstop
+        mediaRecorder.stop(); 
     } else {
         postStatusToParent('error', { context: 'recorder_stop', message: 'Запись не была активна.' });
     }
 }
 
-// НОВАЯ ФУНКЦИЯ: Прослушивание
+
+/**
+ * Play the last recorded audio preview.
+ *
+ * Returns:
+ *   None.
+ */
 function playPreview() {
     if (!recordedAudioBlob) {
         postStatusToParent('error', { context: 'playback', message: 'Нет записанного аудио для прослушивания.' });
@@ -66,33 +97,40 @@ function playPreview() {
     postStatusToParent('playbackState', { status: 'playing' });
 }
 
-// НОВАЯ ФУНКЦИЯ: Отправка сохраненного аудио
+
+/**
+ * Send the cached recording to the backend and clear it.
+ *
+ * Returns:
+ *   None.
+ */
 function sendRecordedAudio() {
     if (!recordedAudioBlob) {
         postStatusToParent('error', { context: 'send_audio', message: 'Нет записанного аудио для отправки.' });
         return;
     }
-    // Используем существующую функцию отправки
+    
     sendAudioToBackend(currentAudioPrompt, recordedAudioBlob);
-    recordedAudioBlob = null; // Очищаем после отправки
+    recordedAudioBlob = null; 
 }
 
 
-// --- Обработчик сообщений от Storyline ---
+
+// Handle messages sent from Storyline to the iframe bridge.
 window.addEventListener('message', (event) => {
-    // Безопасность: if (PARENT_WINDOW_ORIGIN !== '*' && event.origin !== PARENT_WINDOW_ORIGIN) return;
+    
     if (!event.data || !event.data.type) return;
 
     const { type, payload } = event.data;
 
     switch (type) {
-        // --- ПАЙПЛАЙН: ТОЛЬКО ТЕКСТ ---
+        
         case 'sendTextOnly':
             postStatusToParent('bridgeStatus', `Текстовый запрос получен: "${payload}". Отправка...`);
             sendTextToBackend(payload);
             break;
 
-        // --- ПАЙПЛАЙН С АУДИО ---
+        
         case 'setAudioPrompt':
             currentAudioPrompt = payload;
             postStatusToParent('bridgeStatus', `Промпт для аудио "${payload}" установлен.`);
@@ -103,7 +141,7 @@ window.addEventListener('message', (event) => {
         case 'stopRecording':
             stopRecording();
             break;
-        // НОВЫЕ КОМАНДЫ ДЛЯ УПРАВЛЕНИЯ АУДИО
+        
         case 'playPreview':
             playPreview();
             break;
@@ -113,11 +151,17 @@ window.addEventListener('message', (event) => {
     }
 });
 
-// --- Функции отправки данных на бэкенд ---
+
+
 
 /**
- * Пайплайн 1: Отправка только текстового промпта
- * @param {string} prompt - Текст для отправки.
+ * Send a text-only prompt to the backend.
+ *
+ * Args:
+ *   prompt: Prompt text.
+ *
+ * Returns:
+ *   None.
  */
 async function sendTextToBackend(prompt) {
     postStatusToParent('requestState', { status: 'processing', message: 'Отправка текстового запроса...' });
@@ -150,10 +194,16 @@ async function sendTextToBackend(prompt) {
     }
 }
 
+
 /**
- * Пайплайн 2: Отправка аудио и связанного с ним текста
- * @param {string} prompt - Текст, сопровождающий аудио.
- * @param {Blob} audioBlob - Аудиоданные.
+ * Send audio with an optional prompt to the backend.
+ *
+ * Args:
+ *   prompt: Prompt text.
+ *   audioBlob: Recorded audio data.
+ *
+ * Returns:
+ *   None.
  */
 async function sendAudioToBackend(prompt, audioBlob) {
     postStatusToParent('recordingState', { status: 'processing', message: 'Отправка аудио на сервер...' });
@@ -164,7 +214,7 @@ async function sendAudioToBackend(prompt, audioBlob) {
     try {
         const response = await fetch('/.netlify/functions/generate', {
             method: 'POST',
-            body: formData, // Content-Type будет установлен браузером как multipart/form-data
+            body: formData, 
         });
 
         const data = await response.json();
@@ -188,7 +238,7 @@ async function sendAudioToBackend(prompt, audioBlob) {
 }
 
 
-// --- Инициализация моста ---
+
 postStatusToParent('bridgeReady', true);
 postStatusToParent('requestState', { status: 'idle', message: 'Готов к работе.' });
 postStatusToParent('recordingState', { status: 'idle', message: 'Готов к записи.' });

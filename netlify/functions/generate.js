@@ -1,4 +1,6 @@
-// netlify/functions/generate.js
+/**
+ * Netlify Function entry for AI requests and session storage.
+ */
 
 const busboy = require('busboy');
 const { getStore } = require('@netlify/blobs');
@@ -6,14 +8,16 @@ const { generateTextWithGemini, generateTextWithGeminiAndAudio } = require('./pr
 const { generateTextWithOpenAI, generateTextWithOpenAIAndAudio } = require('./providers/openai');
 const { generateTextWithYandex, generateTextWithYandexAndAudio } = require('./providers/yandex');
 
+// CORS origin for preflight and responses.
 const ALLOWED_ORIGIN = "*";
 
-// Поддержка ручной конфигурации Netlify Blobs через переменные окружения
-// Приоритет: пользовательские N_SITE_ID/N_BLOB_TOKEN, затем стандартные NETLIFY_SITE_ID/NETLIFY_BLOBS_TOKEN
+
+
+// Optional manual Blobs config overrides.
 const NETLIFY_SITE_ID = process.env.N_SITE_ID || process.env.NETLIFY_SITE_ID;
 const NETLIFY_BLOBS_TOKEN = process.env.N_BLOB_TOKEN || process.env.NETLIFY_BLOBS_TOKEN;
 
-// Диагностика наличия переменных окружения (без утечек значений)
+
 try {
     console.log('[Blobs] Manual env detected:', {
         hasSiteId: Boolean(NETLIFY_SITE_ID),
@@ -21,6 +25,12 @@ try {
     });
 } catch (_) {}
 
+/**
+ * Create a Netlify Blobs store with manual or auto config.
+ *
+ * Returns:
+ *   Netlify Blobs store instance.
+ */
 function getBlobsStore() {
     try {
         if (NETLIFY_SITE_ID && NETLIFY_BLOBS_TOKEN) {
@@ -28,21 +38,31 @@ function getBlobsStore() {
             const config = { name: 'ai-sessions', siteID: NETLIFY_SITE_ID, token: NETLIFY_BLOBS_TOKEN };
             return getStore(config);
         }
-        // Авто-конфигурация в среде Netlify (prod/preview/dev через netlify dev)
+        
         console.log('[Blobs] Using auto config');
         return getStore({ name: 'ai-sessions' });
     } catch (e) {
         console.error('[Blobs] Store creation failed:', e.message);
-        // Пробрасываем дальше, чтобы верхний уровень корректно залогировал
+        
         throw e;
     }
 }
 
-// Константы для сессий
-const SESSION_TTL_MINUTES = 60;
-const MAX_MESSAGES_IN_SESSION = 20; // Ограничение для скользящего окна
 
-// Функции для работы с сессиями
+// Session limits and retention.
+const SESSION_TTL_MINUTES = 60;
+const MAX_MESSAGES_IN_SESSION = 20;
+
+
+/**
+ * Load a session from Netlify Blobs.
+ *
+ * Args:
+ *   sessionId: Session identifier.
+ *
+ * Returns:
+ *   Session object or null when missing.
+ */
 async function getSession(sessionId) {
     if (!sessionId) return null;
     try {
@@ -55,13 +75,23 @@ async function getSession(sessionId) {
     }
 }
 
+/**
+ * Persist a session to Netlify Blobs.
+ *
+ * Args:
+ *   sessionId: Session identifier.
+ *   sessionData: Session payload.
+ *
+ * Returns:
+ *   None.
+ */
 async function saveSession(sessionId, sessionData) {
     if (!sessionId) return;
     try {
         const store = getBlobsStore();
         await store.set(sessionId, JSON.stringify(sessionData), {
             metadata: { 
-                ttl: SESSION_TTL_MINUTES * 60 // TTL в секундах
+                ttl: SESSION_TTL_MINUTES * 60 
             }
         });
     } catch (error) {
@@ -69,6 +99,15 @@ async function saveSession(sessionId, sessionData) {
     }
 }
 
+/**
+ * Delete a session from Netlify Blobs.
+ *
+ * Args:
+ *   sessionId: Session identifier.
+ *
+ * Returns:
+ *   None.
+ */
 async function deleteSession(sessionId) {
     if (!sessionId) return;
     try {
@@ -79,6 +118,15 @@ async function deleteSession(sessionId) {
     }
 }
 
+/**
+ * Create a new session object.
+ *
+ * Args:
+ *   systemPrompt: Initial system prompt.
+ *
+ * Returns:
+ *   Session object with metadata.
+ */
 function createNewSession(systemPrompt = '') {
     return {
         systemPrompt,
@@ -88,24 +136,45 @@ function createNewSession(systemPrompt = '') {
     };
 }
 
+/**
+ * Trim a message list to the last N items.
+ *
+ * Args:
+ *   messages: Array of message objects.
+ *   maxMessages: Max number of messages to keep.
+ *
+ * Returns:
+ *   Trimmed message array.
+ */
 function trimSessionHistory(messages, maxMessages = MAX_MESSAGES_IN_SESSION) {
     if (messages.length <= maxMessages) return messages;
-    // Оставляем последние maxMessages сообщений
+    
     return messages.slice(-maxMessages);
 }
 
+/**
+ * Combine system prompt, history, and new input for providers.
+ *
+ * Args:
+ *   systemPrompt: System prompt text.
+ *   messages: Existing message history.
+ *   newUserMessage: New user prompt.
+ *
+ * Returns:
+ *   Array of provider message objects.
+ */
 function formatMessagesForProvider(systemPrompt, messages, newUserMessage) {
     const allMessages = [];
     
-    // Добавляем system prompt если есть
+    
     if (systemPrompt && systemPrompt.trim()) {
         allMessages.push({ role: 'system', text: systemPrompt });
     }
     
-    // Добавляем историю сообщений
+    
     allMessages.push(...messages);
     
-    // Добавляем новое сообщение пользователя
+    
     if (newUserMessage && newUserMessage.trim()) {
         allMessages.push({ role: 'user', text: newUserMessage });
     }
@@ -113,6 +182,15 @@ function formatMessagesForProvider(systemPrompt, messages, newUserMessage) {
     return allMessages;
 }
 
+/**
+ * Parse a multipart/form-data request into fields and files.
+ *
+ * Args:
+ *   event: Netlify function event.
+ *
+ * Returns:
+ *   Promise resolving to { fields, files }.
+ */
 function parseMultipartForm(event) {
     return new Promise((resolve, reject) => {
         const bb = busboy({
@@ -124,7 +202,7 @@ function parseMultipartForm(event) {
             fields: {}
         };
 
-        // Мы больше не пытаемся извлечь mimeType здесь, так как он ненадежен
+        
         bb.on('file', (fieldname, file) => {
             const chunks = [];
             file.on('data', (chunk) => chunks.push(chunk));
@@ -145,8 +223,17 @@ function parseMultipartForm(event) {
     });
 }
 
+/**
+ * Netlify Function handler for AI requests.
+ *
+ * Args:
+ *   event: Netlify function event.
+ *
+ * Returns:
+ *   Netlify response object.
+ */
 exports.handler = async (event) => {
-    // CORS Preflight
+    
     if (event.httpMethod === 'OPTIONS') {
         return {
             statusCode: 204,
@@ -185,14 +272,14 @@ exports.handler = async (event) => {
             const sessionId = parsed.fields.sessionId;
             const endSession = parsed.fields.endSession === 'true';
             const resetContext = parsed.fields.resetContext === 'true';
-            const audioFormat = parsed.fields.audioFormat; // 'oggopus' | 'webm' (optional)
+            const audioFormat = parsed.fields.audioFormat; 
             const audioFile = parsed.files.find(f => f.fieldname === 'audio');
             
             if (!audioFile) {
                 throw new Error("Аудиофайл не предоставлен.");
             }
 
-            // Обработка команд управления сессией
+            
             if (endSession && sessionId) {
                 await deleteSession(sessionId);
                 return { statusCode: 200, headers, body: JSON.stringify({ 
@@ -202,7 +289,7 @@ exports.handler = async (event) => {
                 }) };
             }
 
-            // Загружаем или создаём сессию
+            
             let session = null;
             if (sessionId) {
                 session = await getSession(sessionId);
@@ -219,7 +306,7 @@ exports.handler = async (event) => {
             let text;
             let transcript;
             
-            // Формируем контекст для модели с учётом истории
+            
             const messagesForProvider = formatMessagesForProvider(session.systemPrompt, session.messages, prompt);
             
             if (provider === 'openai') {
@@ -252,7 +339,7 @@ exports.handler = async (event) => {
                 transcript = typeof res === 'object' ? res.transcript : undefined;
             }
 
-            // Сохраняем сессию с новыми сообщениями
+            
             if (sessionId) {
                 session.messages.push({ role: 'user', text: transcript || prompt, timestamp: Date.now() });
                 session.messages.push({ role: 'assistant', text: text, timestamp: Date.now() });
@@ -276,8 +363,8 @@ exports.handler = async (event) => {
             var sessionId = body.sessionId;
             var endSession = body.endSession === true;
             var resetContext = body.resetContext === true;
-            var modelName = body.modelName; // для Яндекс (например, yandexgpt, qwen, jne)
-            var modelUri = body.modelUri;   // полный URI, если хотим указать явный
+            var modelName = body.modelName; 
+            var modelUri = body.modelUri;   
             var temperature = body.temperature;
             var maxTokens = body.maxTokens;
             if (!prompt) throw new Error("Промпт не предоставлен.");
@@ -287,7 +374,7 @@ exports.handler = async (event) => {
             throw new Error(`Неподдерживаемый или отсутствующий Content-Type: ${contentType}`);
         }
 
-        // Обработка команд управления сессией для текстового пайплайна
+        
         if (endSession && sessionId) {
             await deleteSession(sessionId);
             return { statusCode: 200, headers, body: JSON.stringify({ 
@@ -297,7 +384,7 @@ exports.handler = async (event) => {
             }) };
         }
 
-        // Загружаем или создаём сессию
+        
         let session = null;
         if (sessionId) {
             session = await getSession(sessionId);
@@ -310,10 +397,10 @@ exports.handler = async (event) => {
             session = createNewSession(system || '');
         }
 
-        // Формируем контекст для модели с учётом истории
+        
         const messagesForProvider = formatMessagesForProvider(session.systemPrompt, session.messages, requestParts[0]);
 
-        // Текстовый путь
+        
         let text;
         if (provider === 'openai') {
             if (!openaiApiKey) {
@@ -340,7 +427,7 @@ exports.handler = async (event) => {
             );
         }
 
-        // Сохраняем сессию с новыми сообщениями
+        
         if (sessionId) {
             session.messages.push({ role: 'user', text: requestParts[0], timestamp: Date.now() });
             session.messages.push({ role: 'assistant', text: text, timestamp: Date.now() });

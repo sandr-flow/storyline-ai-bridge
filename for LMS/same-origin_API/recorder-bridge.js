@@ -1,44 +1,48 @@
-// recorder-bridge.js (Same-Origin Universal API)
-// Global API: window.WebRecorder
-// Modes: 'text' | 'voice' | 'mixed'
+
+/**
+ * Same-origin WebRecorder bridge for Storyline courses.
+ */
 
 (function(){
   'use strict';
 
-  // ======= Config =======
-  const ORIGIN = '*'; // Same-origin expected. Replace with exact origin in production if needed.
+  // Same-origin bridge for Storyline Web Objects.
+  const ORIGIN = '*';
+  // Default behavior for polling, autosend, mode, and backend endpoint.
   const DEFAULTS = {
     pollIntervalMs: 250,
     autosync: true,
-    autosend: false, // if true, autosend on SR_Prompt change (debounced)
-    mode: 'mixed',   // 'text' | 'voice' | 'mixed'
+    autosend: false, 
+    mode: 'mixed',   
     audioFormat: 'webm',
-    endpoint: 'https://nord-m-gemini.netlify.app/.netlify/functions/generate', // default to production Netlify URL; can be overridden by SR_FunctionUrl or init({ endpoint })
+    endpoint: 'https://nord-m-gemini.netlify.app/.netlify/functions/generate', 
   };
 
-  // Storyline variable names (with SR_ prefix)
+  
+  // Storyline variable names used by the bridge.
   const VARS = {
     prompt: 'SR_Prompt',
     system: 'SR_System',
     sessionId: 'SR_SessionId',
     resetContext: 'SR_ResetContext',
     endSession: 'SR_EndSession',
-    mode: 'SR_Mode', // 'text' | 'voice' | 'mixed'
-    autosend: 'SR_AutoSend', // boolean
-    audioFormat: 'SR_AudioFormat', // 'webm' | 'oggopus'
+    mode: 'SR_Mode', 
+    autosend: 'SR_AutoSend', 
+    audioFormat: 'SR_AudioFormat', 
     modelName: 'SR_ModelName',
     modelUri: 'SR_ModelUri',
     temperature: 'SR_Temperature',
     maxTokens: 'SR_MaxTokens',
-    provider: 'SR_Provider', // advisory; backend chooses provider via env for now
+    provider: 'SR_Provider', 
     debug: 'SR_Debug',
-    response: 'SR_Response',       // output text (optional)
-    transcript: 'SR_Transcript',   // output transcript (optional)
-    statusOut: 'SR_Status',        // output status text (optional)
-    functionUrl: 'SR_FunctionUrl', // absolute URL to backend function (optional)
+    response: 'SR_Response',       
+    transcript: 'SR_Transcript',   
+    statusOut: 'SR_Status',        
+    functionUrl: 'SR_FunctionUrl', 
   };
 
-  // ======= State =======
+  
+  // Runtime config and state.
   let cfg = { ...DEFAULTS };
   let state = {
     prompt: '',
@@ -58,7 +62,7 @@
     functionUrl: undefined,
   };
 
-  let player = null; // Storyline player (same-origin)
+  let player = null;
   let pollTimer = null;
 
   let mediaRecorder = null;
@@ -66,7 +70,7 @@
   let recordedAudioBlob = null;
   let audioPreviewElement = null;
 
-  // ======= Utils =======
+  
   const log = (...args) => { if (state.debug) { try { console.log('[SR]', ...args); } catch(_) {} } };
   const status = (text) => {
     postToParent('SR_status', text);
@@ -74,15 +78,31 @@
   };
   const responseMsg = (payload) => {
     postToParent('SR_response', payload);
-    // payload is expected to be string; coerce defensively
+    
     try { setVar(VARS.response, String(payload ?? '')); } catch(_) {}
   };
 
+  /**
+   * Post a message to the parent window.
+   *
+   * Args:
+   *   type: Message type string.
+   *   payload: Payload object or value.
+   *
+   * Returns:
+   *   None.
+   */
   function postToParent(type, payload) {
     try { window.parent && window.parent.postMessage({ type, payload }, ORIGIN); } catch(_) {}
     try { window.top && window.top.postMessage({ type, payload }, ORIGIN); } catch(_) {}
   }
 
+  /**
+   * Safely access the Storyline player from the parent window.
+   *
+   * Returns:
+   *   Storyline player instance or null.
+   */
   function getPlayerSafe(){
     try {
       if (window.parent && typeof window.parent.GetPlayer === 'function') {
@@ -92,15 +112,24 @@
     return null;
   }
 
-  // Cache to avoid repeatedly querying missing Storyline variables (prevents resolver spam)
-  const varPresenceCache = Object.create(null); // name -> true (exists) | false (missing)
+  
+  const varPresenceCache = Object.create(null);
 
+  /**
+   * Read a Storyline variable with a presence cache.
+   *
+   * Args:
+   *   name: Variable name.
+   *
+   * Returns:
+   *   Variable value or undefined when missing.
+   */
   function readVar(name){
     if (!player) return undefined;
     if (varPresenceCache[name] === false) return undefined;
     try {
       const v = player.GetVar(name);
-      // Mark as missing only when truly undefined; empty string is a valid defined value
+      
       if (typeof v === 'undefined') { varPresenceCache[name] = false; return undefined; }
       varPresenceCache[name] = true;
       return v;
@@ -110,6 +139,16 @@
     }
   }
 
+  /**
+   * Write a Storyline variable safely.
+   *
+   * Args:
+   *   name: Variable name.
+   *   value: Value to set.
+   *
+   * Returns:
+   *   None.
+   */
   function setVar(name, value){
     try {
       if (player && typeof player.SetVar === 'function') {
@@ -118,6 +157,15 @@
     } catch(_) {}
   }
 
+  /**
+   * Normalize common types to boolean.
+   *
+   * Args:
+   *   v: Value to convert.
+   *
+   * Returns:
+   *   Boolean value.
+   */
   function toBool(v){
     if (typeof v === 'boolean') return v;
     if (typeof v === 'string') return v === 'true' || v === '1';
@@ -125,6 +173,16 @@
     return false;
   }
 
+  /**
+   * Create a debounced function.
+   *
+   * Args:
+   *   fn: Function to debounce.
+   *   ms: Delay in milliseconds.
+   *
+   * Returns:
+   *   Debounced function.
+   */
   function debounce(fn, ms){
     let t;
     return function(...args){
@@ -133,6 +191,15 @@
     };
   }
 
+  /**
+   * Generate a unique session ID with a prefix.
+   *
+   * Args:
+   *   prefix: Prefix string.
+   *
+   * Returns:
+   *   Unique ID string.
+   */
   function generateId(prefix = 'sr'){
     try {
       if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -144,7 +211,16 @@
     return (prefix ? prefix + '-' : '') + ts + '-' + rnd;
   }
 
-  // Session ID helpers (avoid referencing WebRecorder inside its own initializer)
+  
+  /**
+   * Set and persist the session ID.
+   *
+   * Args:
+   *   v: Session ID value.
+   *
+   * Returns:
+   *   Normalized session ID string.
+   */
   function setSessionIdImpl(v){
     const newId = String(v || '');
     state.sessionId = newId;
@@ -152,6 +228,15 @@
     return newId;
   }
 
+  /**
+   * Generate and persist a new session ID.
+   *
+   * Args:
+   *   prefix: Prefix string.
+   *
+   * Returns:
+   *   New session ID string.
+   */
   function newSessionIdImpl(prefix){
     const id = generateId(prefix);
     state.sessionId = id;
@@ -161,11 +246,17 @@
 
   const debouncedAutoSend = debounce(() => {
     if (state.autosend) {
-      // Use direct function reference to avoid circular dependency
+      
       send().catch(e => log('AutoSend error', e));
     }
   }, 300);
 
+  /**
+   * Sync state from Storyline variables.
+   *
+   * Returns:
+   *   None.
+   */
   function syncFromPlayer(){
     if (!player) return;
     const newState = { ...state };
@@ -191,7 +282,7 @@
     if (typeof vReset !== 'undefined') newState.resetContext = toBool(vReset);
     if (typeof vEnd !== 'undefined') newState.endSession = toBool(vEnd);
     if (typeof vMode !== 'undefined' && vMode) newState.mode = String(vMode);
-    // Treat missing SR_AutoSend as false to avoid stale true state
+    
     newState.autosend = toBool(vAutosend);
     if (typeof vAudioFormat !== 'undefined' && vAudioFormat) newState.audioFormat = String(vAudioFormat);
     if (typeof vModelName !== 'undefined') newState.modelName = vModelName ? String(vModelName) : undefined;
@@ -222,16 +313,34 @@
     }
   }
 
+  /**
+   * Start periodic synchronization with Storyline variables.
+   *
+   * Returns:
+   *   None.
+   */
   function startPolling(){
     if (pollTimer) return;
     pollTimer = setInterval(syncFromPlayer, cfg.pollIntervalMs);
   }
 
+  /**
+   * Stop periodic synchronization with Storyline variables.
+   *
+   * Returns:
+   *   None.
+   */
   function stopPolling(){
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
-  // ======= Media =======
+  
+  /**
+   * Start microphone recording and collect audio chunks.
+   *
+   * Returns:
+   *   None.
+   */
   async function startRecording(){
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -259,11 +368,23 @@
     }
   }
 
+  /**
+   * Stop the active recording if one is running.
+   *
+   * Returns:
+   *   None.
+   */
   function stopRecording(){
     if (mediaRecorder && mediaRecorder.state === 'recording') mediaRecorder.stop();
     else status('Recorder not active.');
   }
 
+  /**
+   * Play the last recorded audio preview.
+   *
+   * Returns:
+   *   None.
+   */
   function play(){
     if (!recordedAudioBlob) { status('No recorded audio.'); return; }
     if (!audioPreviewElement) {
@@ -275,8 +396,14 @@
     status('Playing...');
   }
 
-  // ======= Backend =======
-  // Waits until recordedAudioBlob is ready if we just stopped recording
+  
+  
+  /**
+   * Ensure a recorded audio blob exists by stopping the recorder if needed.
+   *
+   * Returns:
+   *   True if a blob is ready, otherwise false.
+   */
   async function ensureAudioReady(){
     if (recordedAudioBlob) return true;
     try {
@@ -298,10 +425,16 @@
     return !!recordedAudioBlob;
   }
 
+  /**
+   * Send a request based on the current mode and available audio.
+   *
+   * Returns:
+   *   Provider response object.
+   */
   async function send(){
-    // Decide path by mode
+    
     const mode = (state.mode || 'mixed').toLowerCase();
-    // If not pure text mode, try to ensure audio is finalized
+    
     if (mode !== 'text') {
       await ensureAudioReady();
     }
@@ -312,14 +445,20 @@
       if (!hasAudio) throw new Error('No recorded audio to send');
       return sendAudio();
     }
-    // mixed: if audio exists -> audio, else text
+    
     if (hasAudio) return sendAudio();
     return sendText();
   }
 
+  /**
+   * Send a text request to the backend.
+   *
+   * Returns:
+   *   Provider response object.
+   */
   async function sendText(){
     status('Sending text...');
-    // Fallback to Storyline's built-in variables if SR_Prompt is empty
+    
     let promptText = state.prompt || '';
     if (!promptText) {
       try {
@@ -350,7 +489,7 @@
       modelUri: state.modelUri,
       temperature: state.temperature,
       maxTokens: state.maxTokens
-      // provider: backend currently takes provider from env (AI_PROVIDER)
+      
     };
     try{
       const url = state.functionUrl || cfg.endpoint || '/.netlify/functions/generate';
@@ -375,6 +514,12 @@
     }
   }
 
+  /**
+   * Send an audio request to the backend.
+   *
+   * Returns:
+   *   Provider response object.
+   */
   async function sendAudio(){
     if (!recordedAudioBlob) throw new Error('No recorded audio to send');
     status('Sending audio...');
@@ -409,8 +554,8 @@
       }
       responseMsg(data.generatedText || '');
       status('Idle');
-      // optionally clear audio after send
-      // recordedAudioBlob = null;
+      
+      
       return data;
     }catch(e){
       status('Error: ' + e.message);
@@ -418,8 +563,17 @@
     }
   }
 
-  // ======= API =======
+  
   const WebRecorder = {
+    /**
+     * Initialize the bridge and optionally start autosync.
+     *
+     * Args:
+     *   options: Optional configuration overrides.
+     *
+     * Returns:
+     *   True when initialization completes.
+     */
     init(options){
       cfg = { ...DEFAULTS, ...(options || {}) };
       state.mode = cfg.mode;
@@ -428,48 +582,191 @@
         state.functionUrl = cfg.endpoint;
       }
       status('Initializing...');
-      // Obtain Storyline player if same-origin
+      
       player = getPlayerSafe();
       if (player && cfg.autosync) startPolling();
       postToParent('SR_ready', true);
       status('Idle');
       return true;
     },
-    // Recording controls
+    /**
+     * Start microphone recording.
+     *
+     * Returns:
+     *   Promise that resolves when recording starts.
+     */
     startRecording,
+    /**
+     * Stop the active recording.
+     *
+     * Returns:
+     *   None.
+     */
     stopRecording,
+    /**
+     * Play the recorded audio preview.
+     *
+     * Returns:
+     *   None.
+     */
     play,
-    // Sending
+    /**
+     * Send a request based on mode and audio availability.
+     *
+     * Returns:
+     *   Provider response object.
+     */
     send,
-    // Direct setters (optional use)
-    setPrompt(v){ 
+    /**
+     * Set the current prompt text.
+     *
+     * Args:
+     *   v: Prompt text.
+     *
+     * Returns:
+     *   None.
+     */
+    setPrompt(v){
       const oldPrompt = state.prompt;
       state.prompt = String(v || ''); 
-      // Trigger autosend if prompt changed and autosend is enabled
+      
       if (oldPrompt !== state.prompt && state.autosend) {
         debouncedAutoSend();
       }
     },
+    /**
+     * Set the current system instructions.
+     *
+     * Args:
+     *   v: System text.
+     *
+     * Returns:
+     *   None.
+     */
     setSystem(v){ state.system = String(v || ''); },
+    /**
+     * Set the request mode.
+     *
+     * Args:
+     *   v: Mode value: text, voice, or mixed.
+     *
+     * Returns:
+     *   None.
+     */
     setMode(v){ if (v) state.mode = String(v); },
+    /**
+     * Set session metadata in one call.
+     *
+     * Args:
+     *   id: Session ID.
+     *   resetContext: Whether to clear history.
+     *   endSession: Whether to end the session on next send.
+     *
+     * Returns:
+     *   None.
+     */
     setSession({ id, resetContext, endSession } = {}){
       if (typeof id !== 'undefined') { setSessionIdImpl(id); }
       if (typeof resetContext !== 'undefined') state.resetContext = !!resetContext;
       if (typeof endSession !== 'undefined') state.endSession = !!endSession;
     },
+    /**
+     * Mark the next request to reset the session context.
+     *
+     * Returns:
+     *   None.
+     */
     resetContext(){ state.resetContext = true; },
+    /**
+     * Mark the next request to end the session.
+     *
+     * Returns:
+     *   None.
+     */
     endSession(){ state.endSession = true; },
+    /**
+     * Set the session ID.
+     *
+     * Args:
+     *   v: Session ID.
+     *
+     * Returns:
+     *   Session ID string.
+     */
     setSessionId(v){ return setSessionIdImpl(v); },
+    /**
+     * Generate and set a new session ID.
+     *
+     * Args:
+     *   prefix: Prefix string.
+     *
+     * Returns:
+     *   Session ID string.
+     */
     newSessionId(prefix){ return newSessionIdImpl(prefix); },
-    setProvider(v){ state.provider = v ? String(v) : undefined; }, // advisory only
+    /**
+     * Set the provider hint (backend still chooses by env).
+     *
+     * Args:
+     *   v: Provider name.
+     *
+     * Returns:
+     *   None.
+     */
+    setProvider(v){ state.provider = v ? String(v) : undefined; },
+    /**
+     * Enable or disable autosend when SR_Prompt changes.
+     *
+     * Args:
+     *   v: Boolean-like value.
+     *
+     * Returns:
+     *   None.
+     */
     setAutosend(v){
       state.autosend = !!v;
-      // keep in sync with Storyline variable to prevent autosync from overriding
+      
       try { setVar(VARS.autosend, state.autosend); } catch(_) {}
     },
+    /**
+     * Set the audio format used for uploads.
+     *
+     * Args:
+     *   v: Audio format string.
+     *
+     * Returns:
+     *   None.
+     */
     setAudioFormat(v){ if (v) state.audioFormat = String(v); },
+    /**
+     * Enable or disable debug logging.
+     *
+     * Args:
+     *   on: Boolean-like value.
+     *
+     * Returns:
+     *   None.
+     */
     debug(on){ state.debug = !!on; },
+    /**
+     * Override the backend endpoint URL.
+     *
+     * Args:
+     *   v: URL string.
+     *
+     * Returns:
+     *   None.
+     */
     setEndpoint(v){ state.functionUrl = v ? String(v) : undefined; },
+    /**
+     * Bind a preview audio element to the recorder.
+     *
+     * Args:
+     *   el: HTMLAudioElement instance.
+     *
+     * Returns:
+     *   None.
+     */
     setAudioElement(el){ try { if (el && el.tagName === 'AUDIO') { audioPreviewElement = el; } } catch(_) {}
     },
   };

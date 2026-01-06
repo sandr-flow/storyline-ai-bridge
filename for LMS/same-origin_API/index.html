@@ -53,13 +53,15 @@
       const preview = document.getElementById('preview');
       let isRecording = false;
 
-      // Init API (uses default Netlify endpoint) and bind audio element
+      
+      // Initialize WebRecorder and bind the preview audio element.
       try { window.WebRecorder && window.WebRecorder.init && window.WebRecorder.init(); } catch(_) {}
       try { window.WebRecorder && window.WebRecorder.setAudioElement && window.WebRecorder.setAudioElement(preview); } catch(_) {}
-      // Note: Do NOT force-enable autosend here. Respect Storyline SR_AutoSend or explicit API calls.
-      // If you need autosend for local testing, uncomment the next line.
-      // try { window.WebRecorder && window.WebRecorder.setAutosend && window.WebRecorder.setAutosend(true); } catch(_) {}
+      
+      
+      
 
+      // Wire UI controls for recording, playback, and sending.
       btnRecord.onclick = async () => {
         if (!isRecording) {
           try {
@@ -90,7 +92,8 @@
         catch(e){ statusText.textContent = 'Ошибка отправки: ' + (e && e.message || e); }
       };
 
-      // Reflect API status messages
+      
+      // Reflect status updates from the bridge.
       window.addEventListener('message', (e) => {
         const d = e.data || {}; if(!d.type) return;
         if (d.type === 'SR_status') {

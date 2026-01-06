@@ -1,3 +1,17 @@
+/**
+ * Generate a text response with OpenAI chat completions.
+ *
+ * Args:
+ *   apiKey: OpenAI API key.
+ *   input: Either a string prompt, an object with prompt/system, or an array of messages.
+ *
+ * Returns:
+ *   The assistant message text.
+ */
+/**
+ * OpenAI provider adapter for text and audio generation.
+ */
+
 async function generateTextWithOpenAI(apiKey, input) {
   const primaryModel = "gpt-5-nano-2025-08-07";
   const fallbackModel = "gpt-4o-mini";
@@ -5,13 +19,13 @@ async function generateTextWithOpenAI(apiKey, input) {
 
   let messages;
   if (Array.isArray(input)) {
-    // Новый формат: массив сообщений
+    
     messages = input.map(msg => ({
       role: msg.role,
       content: msg.text
     }));
   } else {
-    // Обратная совместимость: старый формат
+    
     const { prompt, system } = normalizeInput(input);
     messages = system ? [
       { role: 'system', content: system },
@@ -29,6 +43,7 @@ async function generateTextWithOpenAI(apiKey, input) {
     body: JSON.stringify(primaryBody),
   });
   if (!response.ok && [400, 404, 422].includes(response.status)) {
+    // Retry with a smaller, more widely available model.
     const errText = await safeReadText(response);
     console.warn(`[OpenAI] Primary model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     modelUsed = fallbackModel;
@@ -49,8 +64,19 @@ async function generateTextWithOpenAI(apiKey, input) {
   return message;
 }
 
+/**
+ * Transcribe audio with OpenAI and generate a response using the transcript.
+ *
+ * Args:
+ *   apiKey: OpenAI API key.
+ *   input: Either a string prompt, an object with prompt/system, or an array of messages.
+ *   audioBase64: Base64-encoded WebM audio.
+ *
+ * Returns:
+ *   An object with message text, transcript, and model metadata.
+ */
 async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
-  // 1) Транскрипция
+  
   const primaryTranscribe = "gpt-4o-mini-transcribe";
   const fallbackTranscribe = "whisper-1";
   const audioBuffer = Buffer.from(audioBase64, "base64");
@@ -69,6 +95,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   let trData;
   let transcribeUsed = primaryTranscribe;
   if (!trResponse.ok && [400, 404, 422].includes(trResponse.status)) {
+    // Fallback to a legacy transcription model when the primary fails.
     const errText = await safeReadText(trResponse);
     console.warn(`[OpenAI] Primary transcription model failed (${primaryTranscribe}). Falling back to ${fallbackTranscribe}. Details: ${errText}`);
     const formData2 = new FormData();
@@ -95,24 +122,24 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   console.log(`[OpenAI] Transcription model: ${transcribeUsed}`);
   console.log(`[OpenAI] Transcript: ${transcriptText}`);
 
-  // 2) Генерация ответа по текстовой модели
+  
   const primaryModel = "gpt-5-nano-2025-08-07";
   const fallbackModel = "gpt-4o-mini";
   let textModelUsed = primaryModel;
   
   let messages;
   if (Array.isArray(input)) {
-    // Новый формат: массив сообщений с добавлением транскрипции к последнему user сообщению
+    
     messages = input.map(msg => ({
       role: msg.role,
       content: msg.text
     }));
-    // Добавляем транскрипцию к последнему user сообщению
+    
     if (messages.length > 0 && messages[messages.length - 1].role === 'user') {
       messages[messages.length - 1].content += `\n\nТранскрипция аудио:\n${transcriptText}`;
     }
   } else {
-    // Обратная совместимость: старый формат
+    
     const { prompt, system } = normalizeInput(input);
     messages = [];
     
@@ -120,7 +147,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
       messages.push({ role: 'system', content: system });
     }
     
-    // Формируем контент пользователя
+    
     let userContent = '';
     if (prompt && prompt.trim()) {
       userContent = `${prompt}\n\nТранскрипция аудио:\n${transcriptText}`;
@@ -145,6 +172,7 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   });
   let chatData;
   if (!chatResponse.ok && [400, 404, 422].includes(chatResponse.status)) {
+    // Retry with a smaller, more widely available model.
     const errText = await safeReadText(chatResponse);
     console.warn(`[OpenAI] Primary text model failed (${primaryModel}). Falling back to ${fallbackModel}. Details: ${errText}`);
     textModelUsed = fallbackModel;
@@ -178,6 +206,15 @@ async function generateTextWithOpenAIAndAudio(apiKey, input, audioBase64) {
   };
 }
 
+/**
+ * Safely read a response body as text.
+ *
+ * Args:
+ *   res: Fetch Response object.
+ *
+ * Returns:
+ *   Body text or a placeholder string.
+ */
 async function safeReadText(res) {
   try {
     return await res.text();
@@ -186,6 +223,15 @@ async function safeReadText(res) {
   }
 }
 
+/**
+ * Normalize prompt input to a consistent shape.
+ *
+ * Args:
+ *   input: String or { prompt, system } object.
+ *
+ * Returns:
+ *   Object with prompt and system fields.
+ */
 function normalizeInput(input) {
   if (typeof input === 'string') {
     return { prompt: input, system: '' };
