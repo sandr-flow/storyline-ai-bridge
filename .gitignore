@@ -2,6 +2,9 @@
 node_modules/
 package-lock.json
 
+# Local archive folder
+nord-m-gemini-bridge-main/
+
 # Environment variables
 .env
 .env.local
